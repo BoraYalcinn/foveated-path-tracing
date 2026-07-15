@@ -129,10 +129,12 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
                          && !capsaicin.getMeshesUpdated() && !capsaicin.getTransformsUpdated()
                          && !lightBuilder->getLightsUpdated()
                          && !lightSampler->getLightSettingsUpdated(capsaicin)
+                         && foveated_enabled_ == prev_foveated_enabled_
                          && capsaicin.getFrameIndex() > 0;
 
     // Update the history
-    options = newOptions;
+    options               = newOptions;
+    prev_foveated_enabled_ = foveated_enabled_;
 
     if (!accumulate)
     {
@@ -140,11 +142,15 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
         cameraData        = caclulateRayCamera(
             {camera.eye, camera.center, camera.up, camera.aspect, camera.fovY, camera.nearZ, camera.farZ},
             renderDimensions);
+
+        // Clear stale accumulation data on reset
+        gfxCommandClearTexture(gfx_, accumulationBuffer);
     }
 
     if (recompile)
     {
         gfxDestroyKernel(gfx_, reference_pt_kernel_);
+        gfxDestroyKernel(gfx_, foveation_fill_kernel_);
         gfxDestroySbt(gfx_, reference_pt_sbt_);
         initKernels(capsaicin);
     }
@@ -160,6 +166,17 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_FrameIndex", capsaicin.getFrameIndex());
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_RayCamera", cameraData);
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_BounceCount", options.reference_pt_bounce_count);
+
+    // ── Foveation ──
+    gfxProgramSetParameter(
+        gfx_, reference_pt_program_, "g_GazePoint", glm::vec2(0.5f, 0.5f)); // şimdilik sabit merkez
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_FoveaRadius", 0.12f);
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_MidRadius", 0.25f);
+    gfxProgramSetParameter(
+        gfx_, reference_pt_program_, "g_FoveatedEnabled", (uint32_t)(foveated_enabled_ ? 1 : 0));
+    gfxProgramSetParameter(
+        gfx_, reference_pt_program_, "g_AspectRatio", (float)bufferDimensions.x / (float)bufferDimensions.y);
+
     gfxProgramSetParameter(
         gfx_, reference_pt_program_, "g_BounceRRCount", options.reference_pt_min_rr_bounces);
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_SampleCount", options.reference_pt_sample_count);
@@ -209,6 +226,18 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
         gfxCommandBindKernel(gfx_, reference_pt_kernel_);
         gfxCommandDispatch(gfx_, num_groups_x, num_groups_y, 1);
     }
+
+    // Foveation doldurma kernel'i çağrısı
+    if (foveated_enabled_)
+    {
+        TimedSection const timed_section(*this, "FoveationFill");
+        uint32_t const    *fill_threads  = gfxKernelGetNumThreads(gfx_, foveation_fill_kernel_);
+        uint32_t const     fill_groups_x = (bufferDimensions.x + fill_threads[0] - 1) / fill_threads[0];
+        uint32_t const     fill_groups_y = (bufferDimensions.y + fill_threads[1] - 1) / fill_threads[1];
+        gfxCommandBindKernel(gfx_, foveation_fill_kernel_);
+        gfxCommandDispatch(gfx_, fill_groups_x, fill_groups_y, 1);
+    }
+
 }
 
 void ReferencePT::terminate() noexcept
@@ -221,7 +250,9 @@ void ReferencePT::terminate() noexcept
     gfxDestroyProgram(gfx_, reference_pt_program_);
     reference_pt_program_ = {};
     gfxDestroyKernel(gfx_, reference_pt_kernel_);
-    reference_pt_kernel_ = {};
+    gfxDestroyKernel(gfx_, foveation_fill_kernel_);
+    reference_pt_kernel_    = {};
+    foveation_fill_kernel_  = {};
     gfxDestroySbt(gfx_, reference_pt_sbt_);
     reference_pt_sbt_ = {};
 }
@@ -236,6 +267,10 @@ void ReferencePT::renderGUI(CapsaicinInternal &capsaicin) const noexcept
     ImGui::DragInt(
         "Min Bounces", reinterpret_cast<int32_t *>(&minBounces), 1, 1, static_cast<int32_t>(bounces));
     minBounces = glm::min(minBounces, bounces);
+
+    //foveation checkbox
+    ImGui::Checkbox("Foveated Rendering", const_cast<bool *>(&foveated_enabled_));
+    
     ImGui::Checkbox(
         "Disable Albedo Textures", &capsaicin.getOption<bool>("reference_pt_disable_albedo_materials"));
     ImGui::Checkbox(
@@ -331,6 +366,11 @@ bool ReferencePT::initKernels(CapsaicinInternal const &capsaicin) noexcept
             defines.data(), static_cast<uint32_t>(defines.size()));
         reference_pt_sbt_    = {};
     }
+
+    // ── Foveation doldurma kernel'i (her iki modda da lazım) ──
+    foveation_fill_kernel_ = gfxCreateComputeKernel(
+        gfx_, reference_pt_program_, "FoveationFill", defines.data(), static_cast<uint32_t>(defines.size()));
+
     return !!reference_pt_program_;
 }
 

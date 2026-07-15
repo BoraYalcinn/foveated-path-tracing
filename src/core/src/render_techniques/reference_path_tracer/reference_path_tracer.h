@@ -31,6 +31,11 @@ namespace Capsaicin
 class ReferencePT : public RenderTechnique
 {
 public:
+
+    // Foveation header
+    bool foveated_enabled_      = true;
+    bool prev_foveated_enabled_ = true;
+
     ReferencePT();
     ~ReferencePT() override;
 
@@ -143,6 +148,8 @@ protected:
 
     GfxProgram reference_pt_program_;
     GfxKernel  reference_pt_kernel_;
+    // foveation fill kernel for foveated rendering
+    GfxKernel foveation_fill_kernel_; 
     GfxSbt     reference_pt_sbt_;
 };
 } // namespace Capsaicin

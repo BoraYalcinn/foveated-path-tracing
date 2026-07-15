@@ -35,6 +35,14 @@ uint g_Accumulate;
 
 uint g_FrameIndex;
 
+// --- Foveation parameters ---
+float2 g_GazePoint;
+float  g_FoveaRadius;
+float  g_MidRadius;
+uint   g_FoveatedEnabled;
+float  g_AspectRatio;
+
+
 StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<float3x4> g_TransformBuffer;
 StructuredBuffer<uint> g_IndexBuffer;
@@ -55,6 +63,58 @@ SamplerState g_TextureSampler; // Should be a linear sampler
 #include "components/light_sampler/light_sampler.hlsl"
 #include "ray_tracing/path_tracing.hlsl"
 
+uint GetFoveationStride(float dist)
+{
+    if (dist > g_MidRadius)
+    {
+        return 4;
+    }
+    if (dist > g_FoveaRadius)
+    {
+        return 2;
+    }
+    return 1;
+}
+
+float GetFoveationDistance(float2 uv)
+{
+    float2 delta = uv - g_GazePoint;
+    delta.x *= g_AspectRatio;
+    return length(delta);
+}
+
+uint2 ClampPixel(int2 pixel, uint2 dimensions)
+{
+    return uint2(clamp(pixel, int2(0, 0), int2(dimensions)-1));
+}
+
+// Gaussian-weighted fill from a 3x3 grid of surrounding anchor pixels.
+// Samples 9 anchors instead of 4, weights by distance → smoother result,
+// especially when anchor pixels are sparse/noisy (low sample count).
+float4 SampleFoveatedGaussian(uint2 pixel, uint stride, uint2 dimensions)
+{
+    // Top-left corner of the anchor-grid cell this pixel belongs to
+    int2 anchorOrigin = (int2(pixel) / int(stride)) * int(stride);
+
+    float  sigma2    = float(stride * stride); // sigma = 1 stride unit in pixel space
+    float4 colorSum  = 0.0f;
+    float  weightSum = 0.0f;
+
+    for (int dy = -1; dy <= 1; dy++)
+    {
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            uint2  ap    = ClampPixel(anchorOrigin + int2(dx, dy) * int(stride), dimensions);
+            float2 delta = float2(int2(ap) - int2(pixel));
+            float  w     = exp(-0.5f * dot(delta, delta) / sigma2);
+            colorSum  += g_AccumulationBuffer[ap] * w;
+            weightSum += w;
+        }
+    }
+
+    return weightSum > 0.0f ? colorSum / weightSum : float4(0, 0, 0, 0);
+}
+
 /**
  * Calculate illumination information for a specific pixel
  * @note This writes a single sample per pixel directly to the output buffer
@@ -66,13 +126,27 @@ void pathTracer(in uint2 pixel, in uint2 dimensions)
     // Setup configurable constants
     const uint minBounces = g_BounceRRCount; //Minimum bounces before early terminations are allowed
     const uint maxBounces = g_BounceCount;
-    const uint maxSamples = g_SampleCount;
 
     //Check if valid pixel
     if (any(pixel >= dimensions))
     {
         return;
     }
+
+    // ── FOVEATION START ──
+    if (g_FoveatedEnabled != 0)
+    {
+        float2 uv = (float2(pixel) + 0.5f) / float2(dimensions);
+        uint stride = GetFoveationStride(GetFoveationDistance(uv));
+
+        if ((pixel.x % stride != 0) || (pixel.y % stride != 0))
+        {
+            return; // filled in FoveationFill pass
+        }
+    }
+    // ── FOVEATION END ──
+
+    const uint maxSamples = g_SampleCount;
     const uint id = pixel.x + pixel.y * dimensions.x;
 
     // Offset pixel to pixel center
@@ -86,7 +160,6 @@ void pathTracer(in uint2 pixel, in uint2 dimensions)
     for (uint sample = 0; sample < maxSamples; )
     {
         // Intialise random number sampler
-        const uint id = pixel.x + pixel.y * dimensions.x;
         const uint frameID = g_FrameIndex * maxSamples + sample;
         Random randomNG = MakeRandom(id, frameID);
 
@@ -104,11 +177,12 @@ void pathTracer(in uint2 pixel, in uint2 dimensions)
         radiance = radiance + ((pathRadiance - radiance) / (float)++sample);
     }
 
-    // Check for incorrect calculations
-    if (any(isnan(radiance)) || any(isinf(radiance)) || any(radiance < 0.0f))
+    // Replace invalid values instead of leaving stale buffer data
+    if (any(isnan(radiance)) || any(isinf(radiance)))
     {
-        return;
+        radiance = 0.0f.xxx;
     }
+    radiance = max(radiance, 0.0f.xxx);
 
     // Accumulate previous samples
     if (g_Accumulate != 0)
@@ -139,4 +213,37 @@ void ReferencePT(in uint2 did : SV_DispatchThreadID)
 {
     pathTracer(did, g_BufferDimensions);
 }
+
+
 #endif
+
+// Fill non-anchor pixels by bilinearly interpolating from the surrounding anchor pixels
+// in the accumulation buffer. Anchor pixels accumulate over frames, so the fill quality
+// improves automatically as the camera stays still.
+[numthreads(8, 8, 1)]
+void FoveationFill(in uint2 did : SV_DispatchThreadID)
+{
+    uint2 pixel = did;
+    if (any(pixel >= g_BufferDimensions))
+    {
+        return;
+    }
+    if (g_FoveatedEnabled == 0)
+    {
+        return;
+    }
+
+    float2 uv = (float2(pixel) + 0.5f) / float2(g_BufferDimensions);
+    uint stride = GetFoveationStride(GetFoveationDistance(uv));
+
+    if ((pixel.x % stride == 0) && (pixel.y % stride == 0))
+    {
+        return; // Anchor pixel — already written by path tracer
+    }
+
+    float4 filled = SampleFoveatedGaussian(pixel, stride, g_BufferDimensions);
+
+    g_OutputBuffer[pixel]       = float4(filled.xyz, 1.0f);
+    g_AccumulationBuffer[pixel] = filled;
+}
+
