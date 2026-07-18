@@ -88,6 +88,16 @@ uint2 ClampPixel(int2 pixel, uint2 dimensions)
     return uint2(clamp(pixel, int2(0, 0), int2(dimensions)-1));
 }
 
+// Nearest reconstruction: atlanan pikseli ait olduğu bloğun
+// sol-üst anchor'ından direkt kopyalar (interpolasyon yok)
+float4 SampleNearestAnchor(uint2 pixel, uint stride, uint2 dimensions)
+{
+    int2 anchorOrigin = (int2(pixel) / int(stride)) * int(stride);
+    uint2 ap = ClampPixel(anchorOrigin, dimensions);
+    return g_OutputBuffer[ap];
+}
+
+
 // Gaussian-weighted fill from a 3x3 grid of surrounding anchor pixels.
 // Samples 9 anchors instead of 4, weights by distance → smoother result,
 // especially when anchor pixels are sparse/noisy (low sample count).
@@ -247,7 +257,8 @@ void FoveationFill(in uint2 did : SV_DispatchThreadID)
         return; // Anchor pixel — already written by path tracer
     }
 
-    float4 filled = SampleFoveatedGaussian(pixel, stride, g_BufferDimensions);
+    // float4 filled = SampleFoveatedGaussian(pixel, stride, g_BufferDimensions);
+    float4 filled = SampleNearestAnchor(pixel, stride, g_BufferDimensions);
        
     
     g_OutputBuffer[pixel]       = float4(filled.xyz, 1.0f);
