@@ -93,10 +93,9 @@ uint2 ClampPixel(int2 pixel, uint2 dimensions)
 // especially when anchor pixels are sparse/noisy (low sample count).
 float4 SampleFoveatedGaussian(uint2 pixel, uint stride, uint2 dimensions)
 {
-    // Top-left corner of the anchor-grid cell this pixel belongs to
     int2 anchorOrigin = (int2(pixel) / int(stride)) * int(stride);
 
-    float  sigma2    = float(stride * stride); // sigma = 1 stride unit in pixel space
+    float  sigma2    = float(stride * stride);
     float4 colorSum  = 0.0f;
     float  weightSum = 0.0f;
 
@@ -104,10 +103,17 @@ float4 SampleFoveatedGaussian(uint2 pixel, uint stride, uint2 dimensions)
     {
         for (int dx = -1; dx <= 1; dx++)
         {
-            uint2  ap    = ClampPixel(anchorOrigin + int2(dx, dy) * int(stride), dimensions);
+            uint2 ap = ClampPixel(anchorOrigin + int2(dx, dy) * int(stride), dimensions);
+
+            // ── Bu komşunun KENDİ bölgesinin stride'ını bul ──
+            float2 apUV     = (float2(ap) + 0.5f) / float2(dimensions);
+            uint   apStride = GetFoveationStride(GetFoveationDistance(apUV));
+            // Gerçek anchor'a snap'le — asla örneklenmemiş piksel okuma
+            ap = (ap / apStride) * apStride;
+
             float2 delta = float2(int2(ap) - int2(pixel));
             float  w     = exp(-0.5f * dot(delta, delta) / sigma2);
-            colorSum  += g_AccumulationBuffer[ap] * w;
+            colorSum  += g_OutputBuffer[ap] * w;
             weightSum += w;
         }
     }
@@ -242,8 +248,9 @@ void FoveationFill(in uint2 did : SV_DispatchThreadID)
     }
 
     float4 filled = SampleFoveatedGaussian(pixel, stride, g_BufferDimensions);
-
+       
+    
     g_OutputBuffer[pixel]       = float4(filled.xyz, 1.0f);
-    g_AccumulationBuffer[pixel] = filled;
+    // g_AccumulationBuffer[pixel] = filled;
 }
 
