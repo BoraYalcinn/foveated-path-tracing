@@ -42,6 +42,10 @@ float  g_MidRadius;
 uint   g_FoveatedEnabled;
 float  g_AspectRatio;
 
+uint g_FoveaSPP;
+uint g_MidSPP;
+uint g_PeripherySPP;
+
 
 StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<float3x4> g_TransformBuffer;
@@ -88,8 +92,8 @@ uint2 ClampPixel(int2 pixel, uint2 dimensions)
     return uint2(clamp(pixel, int2(0, 0), int2(dimensions)-1));
 }
 
-// Nearest reconstruction: atlanan pikseli ait olduğu bloğun
-// sol-üst anchor'ından direkt kopyalar (interpolasyon yok)
+// Nearest reconstruction
+// sol-üst anchor'ından direkt kopyalar 
 float4 SampleNearestAnchor(uint2 pixel, uint stride, uint2 dimensions)
 {
     int2 anchorOrigin = (int2(pixel) / int(stride)) * int(stride);
@@ -98,9 +102,7 @@ float4 SampleNearestAnchor(uint2 pixel, uint stride, uint2 dimensions)
 }
 
 
-// Gaussian-weighted fill from a 3x3 grid of surrounding anchor pixels.
-// Samples 9 anchors instead of 4, weights by distance → smoother result,
-// especially when anchor pixels are sparse/noisy (low sample count).
+// Gaussian-weighted fill from a 3x3 grid 
 float4 SampleFoveatedGaussian(uint2 pixel, uint stride, uint2 dimensions)
 {
     int2 anchorOrigin = (int2(pixel) / int(stride)) * int(stride);
@@ -149,20 +151,31 @@ void pathTracer(in uint2 pixel, in uint2 dimensions)
         return;
     }
 
+    uint maxSamples = g_SampleCount;
+
     // ── FOVEATION START ──
     if (g_FoveatedEnabled != 0)
     {
         float2 uv = (float2(pixel) + 0.5f) / float2(dimensions);
-        uint stride = GetFoveationStride(GetFoveationDistance(uv));
+        float dist = GetFoveationDistance(uv);
+        uint stride = GetFoveationStride(dist);
 
         if ((pixel.x % stride != 0) || (pixel.y % stride != 0))
         {
             return; // filled in FoveationFill pass
         }
+
+        // Bölgeye göre SPP seç 
+        if (dist > g_MidRadius)        
+            maxSamples = g_PeripherySPP;
+        else if (dist > g_FoveaRadius) 
+            maxSamples = g_MidSPP;
+        else                           
+            maxSamples = g_FoveaSPP;
     }
     // ── FOVEATION END ──
 
-    const uint maxSamples = g_SampleCount;
+    
     const uint id = pixel.x + pixel.y * dimensions.x;
 
     // Offset pixel to pixel center
@@ -193,12 +206,11 @@ void pathTracer(in uint2 pixel, in uint2 dimensions)
         radiance = radiance + ((pathRadiance - radiance) / (float)++sample);
     }
 
-    // Replace invalid values instead of leaving stale buffer data
-    if (any(isnan(radiance)) || any(isinf(radiance)))
+    if (any(isnan(radiance)) || any(isinf(radiance)) || any(radiance < 0.0f))
     {
-        radiance = 0.0f.xxx;
+        return;   // orijinal Capsaicin davranışı
     }
-    radiance = max(radiance, 0.0f.xxx);
+    // radiance = max(radiance, 0.0f.xxx);
 
     // Accumulate previous samples
     if (g_Accumulate != 0)
@@ -234,8 +246,6 @@ void ReferencePT(in uint2 did : SV_DispatchThreadID)
 #endif
 
 // Fill non-anchor pixels by bilinearly interpolating from the surrounding anchor pixels
-// in the accumulation buffer. Anchor pixels accumulate over frames, so the fill quality
-// improves automatically as the camera stays still.
 [numthreads(8, 8, 1)]
 void FoveationFill(in uint2 did : SV_DispatchThreadID)
 {

@@ -174,6 +174,10 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_MidRadius", 0.25f);
     gfxProgramSetParameter(
         gfx_, reference_pt_program_, "g_FoveatedEnabled", (uint32_t)(foveated_enabled_ ? 1 : 0));
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_FoveaSPP", (uint32_t)fovea_spp_);
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_MidSPP", (uint32_t)mid_spp_);
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_PeripherySPP", (uint32_t)periphery_spp_);
+
     gfxProgramSetParameter(
         gfx_, reference_pt_program_, "g_AspectRatio", (float)bufferDimensions.x / (float)bufferDimensions.y);
 
@@ -234,6 +238,17 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
         uint32_t const    *fill_threads  = gfxKernelGetNumThreads(gfx_, foveation_fill_kernel_);
         uint32_t const     fill_groups_x = (bufferDimensions.x + fill_threads[0] - 1) / fill_threads[0];
         uint32_t const     fill_groups_y = (bufferDimensions.y + fill_threads[1] - 1) / fill_threads[1];
+        
+        if (foveated_enabled_)
+        {
+            ImGui::DragInt(
+                "Fovea SPP", reinterpret_cast<int32_t *>(const_cast<uint32_t *>(&fovea_spp_)), 1, 1, 64);
+            ImGui::DragInt(
+                "Mid SPP", reinterpret_cast<int32_t *>(const_cast<uint32_t *>(&mid_spp_)), 1, 1, 32);
+            ImGui::DragInt("Periphery SPP",
+                reinterpret_cast<int32_t *>(const_cast<uint32_t *>(&periphery_spp_)), 1, 1, 16);
+        }
+        
         gfxCommandBindKernel(gfx_, foveation_fill_kernel_);
         gfxCommandDispatch(gfx_, fill_groups_x, fill_groups_y, 1);
     }

@@ -36,6 +36,11 @@ public:
     bool foveated_enabled_      = true;
     bool prev_foveated_enabled_ = true;
 
+    uint32_t fovea_spp_ = 4;
+    uint32_t mid_spp_  = 2;
+    uint32_t periphery_spp_ = 1;
+
+
     ReferencePT();
     ~ReferencePT() override;
 
