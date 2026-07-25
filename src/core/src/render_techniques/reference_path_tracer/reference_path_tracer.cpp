@@ -179,6 +179,7 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
         }
     }
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_GazePoint", gaze_point_); // şimdilik sabit merkez
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_ReconstructionMode", (uint32_t)reconstruction_mode_);
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_FoveaRadius", 0.12f);
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_MidRadius", 0.25f);
     gfxProgramSetParameter(
@@ -256,7 +257,15 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
                 "Mid SPP", reinterpret_cast<int32_t *>(const_cast<uint32_t *>(&mid_spp_)), 1, 1, 32);
             ImGui::DragInt("Periphery SPP",
                 reinterpret_cast<int32_t *>(const_cast<uint32_t *>(&periphery_spp_)), 1, 1, 16);
+
+            char const *modes[] = {"Nearest Anchor", "Gaussian 3x3"};
+            ImGui::Combo("Reconstruction",
+                reinterpret_cast<int32_t *>(const_cast<uint32_t *>(&reconstruction_mode_)), modes,
+                IM_ARRAYSIZE(modes));
+
         }
+
+
         
         gfxCommandBindKernel(gfx_, foveation_fill_kernel_);
         gfxCommandDispatch(gfx_, fill_groups_x, fill_groups_y, 1);

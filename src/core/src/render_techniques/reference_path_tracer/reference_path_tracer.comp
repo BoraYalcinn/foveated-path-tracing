@@ -42,6 +42,8 @@ float  g_MidRadius;
 uint   g_FoveatedEnabled;
 float  g_AspectRatio;
 
+uint g_ReconstructionMode;  
+
 uint g_FoveaSPP;
 uint g_MidSPP;
 uint g_PeripherySPP;
@@ -285,9 +287,9 @@ void FoveationFill(in uint2 did : SV_DispatchThreadID)
         return; // Anchor pixel
     }
 
-    float4 filled = SampleFoveatedGaussian(pixel, stride, g_BufferDimensions);
-    //float4 filled = SampleNearestAnchor(pixel, stride, g_BufferDimensions);
-       
+    float4 filled = (g_ReconstructionMode == 0)
+        ? SampleNearestAnchor(pixel, stride, g_BufferDimensions)
+        : SampleFoveatedGaussian(pixel, stride, g_BufferDimensions); 
     
     g_OutputBuffer[pixel] = float4(filled.xyz, 1.0f);
     g_AccumulationBuffer[pixel] = float4(filled.xyz, asfloat(1u)); 
