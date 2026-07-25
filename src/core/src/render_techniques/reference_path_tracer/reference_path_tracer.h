@@ -32,7 +32,7 @@ class ReferencePT : public RenderTechnique
 {
 public:
 
-    // Foveation header
+    // Foveation headerları
     bool foveated_enabled_      = true;
     bool prev_foveated_enabled_ = true;
 
@@ -40,6 +40,9 @@ public:
     uint32_t mid_spp_  = 2;
     uint32_t periphery_spp_ = 1;
 
+    glm::vec2 gaze_point_ = glm::vec2(0.5f, 0.5f);
+    bool gaze_follow_mouse_ = true;
+    // bitiş
 
     ReferencePT();
     ~ReferencePT() override;

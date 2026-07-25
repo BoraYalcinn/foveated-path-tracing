@@ -169,8 +169,16 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_BounceCount", options.reference_pt_bounce_count);
 
     // ── Foveation ──
-    gfxProgramSetParameter(
-        gfx_, reference_pt_program_, "g_GazePoint", glm::vec2(0.5f, 0.5f)); // şimdilik sabit merkez
+    // Gaze: mouse serbest gezerken takip et, sol tuş basılıyken (kamera) dondur
+    if (gaze_follow_mouse_)
+    {
+        ImGuiIO const &io = ImGui::GetIO();
+        if (!io.MouseDown[0] && !io.WantCaptureMouse)
+        {
+            gaze_point_ = glm::vec2(io.MousePos.x / io.DisplaySize.x, io.MousePos.y / io.DisplaySize.y);
+        }
+    }
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_GazePoint", gaze_point_); // şimdilik sabit merkez
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_FoveaRadius", 0.12f);
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_MidRadius", 0.25f);
     gfxProgramSetParameter(
@@ -285,8 +293,10 @@ void ReferencePT::renderGUI(CapsaicinInternal &capsaicin) const noexcept
     minBounces = glm::min(minBounces, bounces);
 
     //foveation checkbox
-    ImGui::Checkbox("Foveated Rendering", const_cast<bool *>(&foveated_enabled_));
     
+    ImGui::Checkbox("Foveated Rendering", const_cast<bool *>(&foveated_enabled_));
+    ImGui::Checkbox("Gaze Follows Mouse", const_cast<bool *>(&gaze_follow_mouse_));
+
     ImGui::Checkbox(
         "Disable Albedo Textures", &capsaicin.getOption<bool>("reference_pt_disable_albedo_materials"));
     ImGui::Checkbox(
