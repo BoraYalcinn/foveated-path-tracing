@@ -129,7 +129,8 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
                          && !capsaicin.getMeshesUpdated() && !capsaicin.getTransformsUpdated()
                          && !lightBuilder->getLightsUpdated()
                          && !lightSampler->getLightSettingsUpdated(capsaicin)
-                         && foveated_enabled_ == prev_foveated_enabled_
+                         && foveated_enabled_ == prev_foveated_enabled_ // foveated enabled seçenepi eklediğim
+                                                                        // için amd'nin kodunda yoktu, ekledim
                          && capsaicin.getFrameIndex() > 0;
 
     // Update the history

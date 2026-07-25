@@ -92,12 +92,17 @@ uint2 ClampPixel(int2 pixel, uint2 dimensions)
     return uint2(clamp(pixel, int2(0, 0), int2(dimensions)-1));
 }
 
-// Nearest reconstruction
+// Nearest reconstruction 
 // sol-üst anchor'ından direkt kopyalar 
 float4 SampleNearestAnchor(uint2 pixel, uint stride, uint2 dimensions)
 {
     int2 anchorOrigin = (int2(pixel) / int(stride)) * int(stride);
     uint2 ap = ClampPixel(anchorOrigin, dimensions);
+
+    float2 apUV = (float2(ap) + 0.5f) / float2(dimensions);
+    uint apStride = GetFoveationStride(GetFoveationDistance(apUV));
+    ap = (ap / apStride) * apStride;
+
     return g_OutputBuffer[ap];
 }
 
@@ -111,16 +116,16 @@ float4 SampleFoveatedGaussian(uint2 pixel, uint stride, uint2 dimensions)
     float4 colorSum  = 0.0f;
     float  weightSum = 0.0f;
 
+    
     for (int dy = -1; dy <= 1; dy++)
     {
         for (int dx = -1; dx <= 1; dx++)
         {
             uint2 ap = ClampPixel(anchorOrigin + int2(dx, dy) * int(stride), dimensions);
 
-            // ── Bu komşunun KENDİ bölgesinin stride'ını bul ──
-            float2 apUV     = (float2(ap) + 0.5f) / float2(dimensions);
+         
+            float2 apUV = (float2(ap) + 0.5f) / float2(dimensions);
             uint   apStride = GetFoveationStride(GetFoveationDistance(apUV));
-            // Gerçek anchor'a snap'le — asla örneklenmemiş piksel okuma
             ap = (ap / apStride) * apStride;
 
             float2 delta = float2(int2(ap) - int2(pixel));
@@ -129,8 +134,16 @@ float4 SampleFoveatedGaussian(uint2 pixel, uint stride, uint2 dimensions)
             weightSum += w;
         }
     }
+    
+    if (weightSum <= 0.0f)
+    {
+        return float4(0, 0, 0, 0);
+    }else
+    {
+        return colorSum / weightSum;
+    }
 
-    return weightSum > 0.0f ? colorSum / weightSum : float4(0, 0, 0, 0);
+    
 }
 
 /**
@@ -189,7 +202,7 @@ void pathTracer(in uint2 pixel, in uint2 dimensions)
     for (uint sample = 0; sample < maxSamples; )
     {
         // Intialise random number sampler
-        const uint frameID = g_FrameIndex * maxSamples + sample;
+        const uint frameID = g_FrameIndex * g_SampleCount + sample;
         Random randomNG = MakeRandom(id, frameID);
 
         // Calculate jittered pixel position
@@ -201,17 +214,21 @@ void pathTracer(in uint2 pixel, in uint2 dimensions)
 
         float3 pathRadiance = 0.0f.xxx;
         traceFullPath(ray, randomStratified, randomNG, minBounces, maxBounces, pathRadiance);
+            
+        if (any(isnan(pathRadiance)) || any(isinf(pathRadiance)) || any(pathRadiance < 0.0f))
+        pathRadiance = 0.0f.xxx;
 
         // Calculate running average of samples (Welfords online algorithm)
         radiance = radiance + ((pathRadiance - radiance) / (float)++sample);
     }
 
-    if (any(isnan(radiance)) || any(isinf(radiance)) || any(radiance < 0.0f))
+    if (any(isnan(radiance)) || any(isinf(radiance)))
     {
-        return;   // orijinal Capsaicin davranışı
+        radiance = 0.0f.xxx;
     }
-    // radiance = max(radiance, 0.0f.xxx);
-
+    radiance = max(radiance, 0.0f.xxx);
+    
+    // AMD'NIN ACCUMULATION ALGORITMASI
     // Accumulate previous samples
     if (g_Accumulate != 0)
     {
@@ -245,15 +262,14 @@ void ReferencePT(in uint2 did : SV_DispatchThreadID)
 
 #endif
 
-// Fill non-anchor pixels by bilinearly interpolating from the surrounding anchor pixels
+// Fill  pixels 
 [numthreads(8, 8, 1)]
 void FoveationFill(in uint2 did : SV_DispatchThreadID)
 {
     uint2 pixel = did;
     if (any(pixel >= g_BufferDimensions))
     {
-        return;
-    }
+        return;    }
     if (g_FoveatedEnabled == 0)
     {
         return;
@@ -264,14 +280,14 @@ void FoveationFill(in uint2 did : SV_DispatchThreadID)
 
     if ((pixel.x % stride == 0) && (pixel.y % stride == 0))
     {
-        return; // Anchor pixel — already written by path tracer
+        return; // Anchor pixel
     }
 
     // float4 filled = SampleFoveatedGaussian(pixel, stride, g_BufferDimensions);
     float4 filled = SampleNearestAnchor(pixel, stride, g_BufferDimensions);
        
     
-    g_OutputBuffer[pixel]       = float4(filled.xyz, 1.0f);
-    // g_AccumulationBuffer[pixel] = filled;
+    g_OutputBuffer[pixel] = float4(filled.xyz, 1.0f);
+    // g_AccumulationBuffer[pixel] = float4(filled.xyz, asfloat(1u)); 
 }
 
