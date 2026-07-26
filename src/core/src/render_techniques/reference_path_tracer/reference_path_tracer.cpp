@@ -62,6 +62,17 @@ RenderOptionList ReferencePT::getRenderOptions() noexcept
     newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_disable_nee, options));
     newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_use_dxr10, options));
     newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_accumulate, options));
+
+    newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_foveated_enabled, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_fovea_spp, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_mid_spp, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_periphery_spp, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_reconstruction_mode, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_fovea_radius, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_mid_radius, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_gaze_x, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_gaze_y, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(reference_pt_gaze_follow_mouse, options));
     return newOptions;
 }
 
@@ -79,6 +90,18 @@ ReferencePT::RenderOptions ReferencePT::convertOptions(RenderOptionList const &o
     RENDER_OPTION_GET(reference_pt_disable_nee, newOptions, options)
     RENDER_OPTION_GET(reference_pt_use_dxr10, newOptions, options)
     RENDER_OPTION_GET(reference_pt_accumulate, newOptions, options)
+
+    RENDER_OPTION_GET(reference_pt_foveated_enabled, newOptions, options)
+    RENDER_OPTION_GET(reference_pt_fovea_spp, newOptions, options)
+    RENDER_OPTION_GET(reference_pt_mid_spp, newOptions, options)
+    RENDER_OPTION_GET(reference_pt_periphery_spp, newOptions, options)
+    RENDER_OPTION_GET(reference_pt_reconstruction_mode, newOptions, options)
+    RENDER_OPTION_GET(reference_pt_fovea_radius, newOptions, options)
+    RENDER_OPTION_GET(reference_pt_mid_radius, newOptions, options)
+    RENDER_OPTION_GET(reference_pt_gaze_x, newOptions, options)
+    RENDER_OPTION_GET(reference_pt_gaze_y, newOptions, options)
+    RENDER_OPTION_GET(reference_pt_gaze_follow_mouse, newOptions, options)
+
     return newOptions;
 }
 
@@ -129,13 +152,14 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
                          && !capsaicin.getMeshesUpdated() && !capsaicin.getTransformsUpdated()
                          && !lightBuilder->getLightsUpdated()
                          && !lightSampler->getLightSettingsUpdated(capsaicin)
-                         && foveated_enabled_ == prev_foveated_enabled_ // foveated enabled seçenepi eklediğim
-                                                                        // için amd'nin kodunda yoktu, ekledim
+                         && !lightSampler->getLightSettingsUpdated(capsaicin)
+                         && options.reference_pt_foveated_enabled == newOptions.reference_pt_foveated_enabled
                          && capsaicin.getFrameIndex() > 0;
+                         
 
     // Update the history
     options               = newOptions;
-    prev_foveated_enabled_ = foveated_enabled_;
+    
 
     if (!accumulate)
     {
@@ -170,23 +194,27 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
 
     // ── Foveation ──
     // Gaze: mouse serbest gezerken takip et, sol tuş basılıyken (kamera) dondur
-    if (gaze_follow_mouse_)
+    if (options.reference_pt_gaze_follow_mouse)
     {
         ImGuiIO const &io = ImGui::GetIO();
         if (!io.MouseDown[0] && !io.WantCaptureMouse)
         {
-            gaze_point_ = glm::vec2(io.MousePos.x / io.DisplaySize.x, io.MousePos.y / io.DisplaySize.y);
+            options.reference_pt_gaze_x = io.MousePos.x / io.DisplaySize.x;
+            options.reference_pt_gaze_y = io.MousePos.y / io.DisplaySize.y;
         }
     }
-    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_GazePoint", gaze_point_); // şimdilik sabit merkez
-    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_ReconstructionMode", (uint32_t)reconstruction_mode_);
-    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_FoveaRadius", 0.12f);
-    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_MidRadius", 0.25f);
+
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_GazePoint",
+        glm::vec2(options.reference_pt_gaze_x, options.reference_pt_gaze_y));
     gfxProgramSetParameter(
-        gfx_, reference_pt_program_, "g_FoveatedEnabled", (uint32_t)(foveated_enabled_ ? 1 : 0));
-    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_FoveaSPP", (uint32_t)fovea_spp_);
-    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_MidSPP", (uint32_t)mid_spp_);
-    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_PeripherySPP", (uint32_t)periphery_spp_);
+        gfx_, reference_pt_program_, "g_ReconstructionMode", options.reference_pt_reconstruction_mode);
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_FoveaRadius", options.reference_pt_fovea_radius);
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_MidRadius", options.reference_pt_mid_radius);
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_FoveatedEnabled",
+        (uint32_t)(options.reference_pt_foveated_enabled ? 1 : 0));
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_FoveaSPP", options.reference_pt_fovea_spp);
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_MidSPP", options.reference_pt_mid_spp);
+    gfxProgramSetParameter(gfx_, reference_pt_program_, "g_PeripherySPP", options.reference_pt_periphery_spp);
 
     gfxProgramSetParameter(
         gfx_, reference_pt_program_, "g_AspectRatio", (float)bufferDimensions.x / (float)bufferDimensions.y);
@@ -242,31 +270,13 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
     }
 
     // Foveation doldurma kernel'i çağrısı
-    if (foveated_enabled_)
+    if (options.reference_pt_foveated_enabled)
     {
         TimedSection const timed_section(*this, "FoveationFill");
         uint32_t const    *fill_threads  = gfxKernelGetNumThreads(gfx_, foveation_fill_kernel_);
         uint32_t const     fill_groups_x = (bufferDimensions.x + fill_threads[0] - 1) / fill_threads[0];
         uint32_t const     fill_groups_y = (bufferDimensions.y + fill_threads[1] - 1) / fill_threads[1];
-        
-        if (foveated_enabled_)
-        {
-            ImGui::DragInt(
-                "Fovea SPP", reinterpret_cast<int32_t *>(const_cast<uint32_t *>(&fovea_spp_)), 1, 1, 64);
-            ImGui::DragInt(
-                "Mid SPP", reinterpret_cast<int32_t *>(const_cast<uint32_t *>(&mid_spp_)), 1, 1, 32);
-            ImGui::DragInt("Periphery SPP",
-                reinterpret_cast<int32_t *>(const_cast<uint32_t *>(&periphery_spp_)), 1, 1, 16);
 
-            char const *modes[] = {"Nearest Anchor", "Gaussian 3x3"};
-            ImGui::Combo("Reconstruction",
-                reinterpret_cast<int32_t *>(const_cast<uint32_t *>(&reconstruction_mode_)), modes,
-                IM_ARRAYSIZE(modes));
-
-        }
-
-
-        
         gfxCommandBindKernel(gfx_, foveation_fill_kernel_);
         gfxCommandDispatch(gfx_, fill_groups_x, fill_groups_y, 1);
     }
@@ -301,22 +311,31 @@ void ReferencePT::renderGUI(CapsaicinInternal &capsaicin) const noexcept
         "Min Bounces", reinterpret_cast<int32_t *>(&minBounces), 1, 1, static_cast<int32_t>(bounces));
     minBounces = glm::min(minBounces, bounces);
 
-    //foveation checkbox
-    
-    ImGui::Checkbox("Foveated Rendering", const_cast<bool *>(&foveated_enabled_));
-    ImGui::Checkbox("Gaze Follows Mouse", const_cast<bool *>(&gaze_follow_mouse_));
+    // ── Foveation ──
+    ImGui::Checkbox("Foveated Rendering", &capsaicin.getOption<bool>("reference_pt_foveated_enabled"));
 
-    ImGui::Checkbox(
-        "Disable Albedo Textures", &capsaicin.getOption<bool>("reference_pt_disable_albedo_materials"));
-    ImGui::Checkbox(
-        "Disable Direct Lighting", &capsaicin.getOption<bool>("reference_pt_disable_direct_lighting"));
-    ImGui::Checkbox("NEE Only", &capsaicin.getOption<bool>("reference_pt_nee_only"));
-    ImGui::Checkbox("Disable NEE", &capsaicin.getOption<bool>("reference_pt_disable_nee"));
-    ImGui::Checkbox(
-        "Disable Specular Materials", &capsaicin.getOption<bool>("reference_pt_disable_specular_materials"));
-    ImGui::Checkbox(
-        "Disable Alpha Testing", &capsaicin.getOption<bool>("reference_pt_disable_alpha_testing"));
-    ImGui::Checkbox("Enable Accumulation", &capsaicin.getOption<bool>("reference_pt_accumulate"));
+    if (capsaicin.getOption<bool>("reference_pt_foveated_enabled"))
+    {
+        char const *modes[] = {"Nearest Anchor", "Gaussian 3x3"};
+        ImGui::Combo("Reconstruction",
+            reinterpret_cast<int32_t *>(&capsaicin.getOption<uint32_t>("reference_pt_reconstruction_mode")),
+            modes, IM_ARRAYSIZE(modes));
+
+        ImGui::DragInt("Fovea SPP",
+            reinterpret_cast<int32_t *>(&capsaicin.getOption<uint32_t>("reference_pt_fovea_spp")), 1, 1, 64);
+        ImGui::DragInt("Mid SPP",
+            reinterpret_cast<int32_t *>(&capsaicin.getOption<uint32_t>("reference_pt_mid_spp")), 1, 1, 32);
+        ImGui::DragInt("Periphery SPP",
+            reinterpret_cast<int32_t *>(&capsaicin.getOption<uint32_t>("reference_pt_periphery_spp")), 1, 1,
+            16);
+
+        ImGui::DragFloat(
+            "Fovea Radius", &capsaicin.getOption<float>("reference_pt_fovea_radius"), 0.005f, 0.02f, 1.0f);
+        ImGui::DragFloat(
+            "Mid Radius", &capsaicin.getOption<float>("reference_pt_mid_radius"), 0.005f, 0.05f, 1.5f);
+
+        ImGui::Checkbox("Gaze Follows Mouse", &capsaicin.getOption<bool>("reference_pt_gaze_follow_mouse"));
+    }
 }
 
 bool ReferencePT::initKernels(CapsaicinInternal const &capsaicin) noexcept

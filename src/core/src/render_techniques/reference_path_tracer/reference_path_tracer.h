@@ -32,20 +32,7 @@ class ReferencePT : public RenderTechnique
 {
 public:
 
-    // Foveation headerları
-    bool foveated_enabled_      = true;
-    bool prev_foveated_enabled_ = true;
-
-
-    uint32_t fovea_spp_ = 4;
-    uint32_t mid_spp_  = 2;
-    uint32_t periphery_spp_ = 1;
-
-    glm::vec2 gaze_point_ = glm::vec2(0.5f, 0.5f);
-    bool gaze_follow_mouse_ = true;
     
-    uint32_t reconstruction_mode_ = 0; // 0 = nearest, 1 = gaussian
-    // bitiş
 
     ReferencePT();
     ~ReferencePT() override;
@@ -79,6 +66,18 @@ public:
         bool reference_pt_disable_nee = false; /**< Disable light contributions from Next Event Estimation */
         bool reference_pt_use_dxr10   = false; /**< Use dxr 1.0 ray-tracing pipelines instead of inline rt */
         bool reference_pt_accumulate  = true;  /**< Enable accumulation of frames */
+
+        // ── Foveation ──
+        bool     reference_pt_foveated_enabled    = true;
+        uint32_t reference_pt_fovea_spp           = 4;
+        uint32_t reference_pt_mid_spp             = 2;
+        uint32_t reference_pt_periphery_spp       = 1;
+        uint32_t reference_pt_reconstruction_mode = 0; // 0=nearest, 1=gaussian
+        float    reference_pt_fovea_radius        = 0.12f;
+        float    reference_pt_mid_radius          = 0.25f;
+        float    reference_pt_gaze_x              = 0.5f;
+        float    reference_pt_gaze_y              = 0.5f;
+        bool     reference_pt_gaze_follow_mouse   = true;
     };
 
     /**
