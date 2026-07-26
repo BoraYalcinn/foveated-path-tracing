@@ -1,0 +1,21 @@
+Name,Average,Min,Max,Accumulated,Frame2000
+LightBuilder,0.000,0.000,0.000,0.000,0.000
+BrdfLut,0.000,0.000,0.000,0.000,0.000
+RandomNumberGenerator,0.000,0.000,0.000,0.000,0.000
+LightSamplerSwitcher,0.425,0.425,0.425,0.425,0.425
+LightSamplerSwitcher / BuildLightSampler,0.425,0.425,0.425,0.425,0.425
+StratifiedSampler,0.000,0.000,0.000,0.000,0.000
+BlueNoiseSampler,0.000,0.000,0.000,0.000,0.000
+Reference Path Tracer,6.346,6.346,6.346,6.346,6.346
+Reference Path Tracer / ReferencePT,6.346,6.346,6.346,6.346,6.346
+Image Metrics,0.000,0.000,0.000,0.000,0.000
+Auto Exposure,0.071,0.071,0.071,0.071,0.071
+Auto Exposure / BuildHistogram,0.068,0.068,0.068,0.068,0.068
+Auto Exposure / AutoExposure,0.001,0.001,0.001,0.001,0.001
+Auto Exposure / AutoExposureCopyBack,0.001,0.001,0.001,0.001,0.001
+Tone mapping,0.026,0.026,0.026,0.026,0.026
+Tone mapping / ToneMap,0.026,0.026,0.026,0.026,0.026
+Variance Estimate,0.052,0.052,0.052,0.052,0.052
+Variance Estimate / ComputeMean,0.031,0.031,0.031,0.031,0.031
+Variance Estimate / ComputeDistance,0.014,0.014,0.014,0.014,0.014
+Variance Estimate / ComputeDeviation,0.001,0.001,0.001,0.001,0.001
