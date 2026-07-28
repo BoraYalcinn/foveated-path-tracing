@@ -43,17 +43,11 @@ mouse; the same input path is designed to be swapped for a Tobii Eye Tracker 5.*
 
 ---
 
-## Video
+## 🎥 Demo Video
 
-very soon
-<!-- [![Watch the demo](docs/images/video_thumbnail.png)](https://youtu.be/YOUR_VIDEO_ID)
+Click the image below to watch the demo.
 
-     TODO: YOUTUBE_ID'yi degistir.
-     Thumbnail istemezsen su satiri kullan:
-     **[▶ Watch the demo on YouTube](https://youtu.be/YOUR_VIDEO_ID)**
--->
-
----
+[![Demo Video](https://img.youtube.com/vi/nQRQgYVg8VM/mqdefault.jpg)](https://www.youtube.com/watch?v=nQRQgYVg8VM)
 
 ## Paper
 
